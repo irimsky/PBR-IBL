@@ -29,7 +29,7 @@ Application::Application()
 	sceneSettings.lights[1].radiance = glm::vec3{ 1.0f };
 	sceneSettings.lights[2].radiance = glm::vec3{ 1.0f };
 
-	sceneSettings.envName = "seaway";
+	sceneSettings.envName = "street";
 	sceneSettings.objectPitch = 0;
 	sceneSettings.objectYaw = -90;
 }

@@ -94,13 +94,13 @@
     <None Include="data\shaders\cs_lut.glsl">
       <Filter>shaders</Filter>
     </None>
-    <None Include="data\shaders\tonemap_fs.glsl">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="data\shaders\tonemap_vs.glsl">
-      <Filter>shaders</Filter>
-    </None>
     <None Include="data\shaders\cs_prefilter.glsl">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="data\shaders\postprocess_fs.glsl">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="data\shaders\postprocess_vs.glsl">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>

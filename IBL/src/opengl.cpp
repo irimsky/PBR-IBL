@@ -137,7 +137,7 @@ void Renderer::setup(const SceneSettings& scene)
 
 	// 加载tonemap、天空盒、pbr着色器
 	// TODO: recompile warning，检查一下
-	m_tonemapShader = Shader("data/shaders/tonemap_vs.glsl", "data/shaders/tonemap_fs.glsl");
+	m_tonemapShader = Shader("data/shaders/postprocess_vs.glsl", "data/shaders/postprocess_fs.glsl");
 	
 	m_skybox = createMeshBuffer(Mesh::fromFile("data/meshes/skybox.obj"));
 	m_skyboxShader = Shader("data/shaders/skybox_vs.glsl", "data/shaders/skybox_fs.glsl");
@@ -319,61 +319,6 @@ void Renderer::render(GLFWwindow* window, const Camera& camera, const SceneSetti
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 
 	glfwSwapBuffers(window);
-}
-
-GLuint Renderer::compileShader(const std::string& filename, GLenum type)
-{
-	const std::string src = File::readText(filename);
-	if (src.empty()) {
-		throw std::runtime_error("Cannot read shader source file: " + filename);
-	}
-	const GLchar* srcBufferPtr = src.c_str();
-
-	std::printf("Compiling GLSL shader: %s\n", filename.c_str());
-
-	GLuint shader = glCreateShader(type);
-	glShaderSource(shader, 1, &srcBufferPtr, nullptr);
-	glCompileShader(shader);
-
-	GLint status;
-	glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
-	if (status != GL_TRUE) {
-		GLsizei infoLogSize;
-		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLogSize);
-		std::unique_ptr<GLchar[]> infoLog(new GLchar[infoLogSize]);
-		glGetShaderInfoLog(shader, infoLogSize, nullptr, infoLog.get());
-		throw std::runtime_error(std::string("Shader compilation failed: ") + filename + "\n" + infoLog.get());
-	}
-	return shader;
-}
-
-GLuint Renderer::linkProgram(std::initializer_list<GLuint> shaders)
-{
-	GLuint program = glCreateProgram();
-
-	for (GLuint shader : shaders) {
-		glAttachShader(program, shader);
-	}
-	glLinkProgram(program);
-	for (GLuint shader : shaders) {
-		glDetachShader(program, shader);
-		glDeleteShader(shader);
-	}
-
-	GLint status;
-	glGetProgramiv(program, GL_LINK_STATUS, &status);
-	if (status == GL_TRUE) {
-		glValidateProgram(program);
-		glGetProgramiv(program, GL_VALIDATE_STATUS, &status);
-	}
-	if (status != GL_TRUE) {
-		GLsizei infoLogSize;
-		glGetProgramiv(program, GL_INFO_LOG_LENGTH, &infoLogSize);
-		std::unique_ptr<GLchar[]> infoLog(new GLchar[infoLogSize]);
-		glGetProgramInfoLog(program, infoLogSize, nullptr, infoLog.get());
-		throw std::runtime_error(std::string("Program link failed\n") + infoLog.get());
-	}
-	return program;
 }
 
 Texture Renderer::createTexture(GLenum target, int width, int height, GLenum internalformat, int levels) const

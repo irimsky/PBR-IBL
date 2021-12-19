@@ -44,9 +44,6 @@ public:
 	void shutdown() override;
 
 private:
-	static GLuint compileShader(const std::string& filename, GLenum type);
-	static GLuint linkProgram(std::initializer_list<GLuint> shaders);
-
 	Texture createTexture(GLenum target, int width, int height, GLenum internalformat, int levels = 0) const;
 	Texture createTexture(const std::shared_ptr<class Image>& image, GLenum format, GLenum internalformat, int levels = 0) const;
 	static void deleteTexture(Texture& texture);
