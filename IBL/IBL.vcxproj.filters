@@ -71,6 +71,9 @@
     <ClInclude Include="src\shader.hpp">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="src\scene_setting.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="data\shaders\cs_equirect2cube.glsl">

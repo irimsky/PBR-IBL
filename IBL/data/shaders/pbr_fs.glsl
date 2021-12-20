@@ -42,7 +42,7 @@ layout(binding=8) uniform sampler2D emmisiveTexture;
 uniform bool haveMetalness;
 uniform bool haveRoughness;
 uniform bool haveOcclusion;
-uniform bool haveEmmisive;
+uniform bool haveEmission;
 
 
 float NDF_GGX(float cosLh, float roughness)
@@ -153,7 +153,7 @@ void main()
 	
 	// 自发光项
 	vec3 emmision = vec3(0);
-	if(haveEmmisive)
+	if(haveEmission)
 		emmision = texture(emmisiveTexture, vin.texcoord).rgb;
 
 	// 最终结果

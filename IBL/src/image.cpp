@@ -1,7 +1,9 @@
 #include <stdexcept>
 #include <stb/stb_image.h>
+#include <iostream>
 
 #include "image.hpp"
+
 
 Image::Image()
 	: m_width(0)

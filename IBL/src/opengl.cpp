@@ -135,29 +135,80 @@ void Renderer::setup(const SceneSettings& scene)
 	m_transformUB = createUniformBuffer<TransformUB>();
 	m_shadingUB = createUniformBuffer<ShadingUB>();
 
-	// 加载tonemap、天空盒、pbr着色器
+	// 加载后处理、天空盒、pbr着色器
 	// TODO: recompile warning，检查一下
 	m_tonemapShader = Shader("data/shaders/postprocess_vs.glsl", "data/shaders/postprocess_fs.glsl");
-	
-	m_skybox = createMeshBuffer(Mesh::fromFile("data/meshes/skybox.obj"));
+	m_pbrShader = Shader("data/shaders/pbr_vs.glsl", "data/shaders/pbr_fs.glsl");
 	m_skyboxShader = Shader("data/shaders/skybox_vs.glsl", "data/shaders/skybox_fs.glsl");
 
-	m_pbrModel = createMeshBuffer(Mesh::fromFile("data/meshes/helmet.obj"));
-	m_pbrShader = Shader("data/shaders/pbr_vs.glsl", "data/shaders/pbr_fs.glsl");
-	m_pbrShader.use();
+	std::cout << "Start Loading Models:" << std::endl;
+	// 天空盒模型
+	m_skybox = createMeshBuffer(Mesh::fromFile("data/skybox.obj"));
+	// PBR模型
+	std::string modelPath = "data/models/" + scene.objName + "/" + scene.objName;
+	if(scene.objType == Mesh::ImportModel)
+		m_pbrModel = createMeshBuffer(Mesh::fromFile(modelPath + scene.objExt));
+
 	
 	// 加载纹理贴图
-	// TODO: 重构文件结构，支持自动扫描贴图
-	m_albedoTexture = createTexture(Image::fromFile("data/textures/helmet_basecolor.tga", 3), GL_RGB, GL_SRGB8);
-	m_normalTexture = createTexture(Image::fromFile("data/textures/helmet_normal.tga", 3), GL_RGB, GL_RGB8);
-	m_pbrShader.setBool("haveMetalness", true);
-	m_metalnessTexture = createTexture(Image::fromFile("data/textures/helmet_metalness.tga", 1), GL_RED, GL_R8);
-	m_pbrShader.setBool("haveRoughness", true);
-	m_roughnessTexture = createTexture(Image::fromFile("data/textures/helmet_roughness.tga", 1), GL_RED, GL_R8);
-	m_pbrShader.setBool("haveOcclusion", true);
-	m_occlusionTexture = createTexture(Image::fromFile("data/textures/helmet_occlusion.tga", 1), GL_RED, GL_R8);
-	m_pbrShader.setBool("haveEmmisive", true);
-	m_emmisionTexture = createTexture(Image::fromFile("data/textures/helmet_emission.tga", 3), GL_RGB, GL_SRGB8);
+	std::cout << "Start Loading Textures:" << std::endl;
+	m_albedoTexture = createTexture(
+		Image::fromFile(modelPath + "_albedo" + scene.texExt, 3),
+		GL_RGB, GL_SRGB8
+	);
+	m_normalTexture = createTexture(
+		Image::fromFile(modelPath + "_normal" + scene.texExt, 3),
+		GL_RGB, GL_RGB8
+	);
+
+	m_pbrShader.use();
+	try {
+		m_metalnessTexture = createTexture(
+			Image::fromFile(modelPath + "_metalness" + scene.texExt, 1),
+			GL_RED, GL_R8
+		);
+		m_pbrShader.setBool("haveMetalness", true);
+	}
+	catch(std::runtime_error){
+		std::cout << "No Metal Texture" << std::endl;
+		m_pbrShader.setBool("haveMetalness", false);
+	}
+
+	try {
+		m_roughnessTexture = createTexture(
+			Image::fromFile(modelPath + "_roughness" + scene.texExt, 1),
+			GL_RED, GL_R8
+		);
+		m_pbrShader.setBool("haveRoughness", true);
+	}
+	catch (std::runtime_error) {
+		std::cout << "No Rough Texture" << std::endl;
+		m_pbrShader.setBool("haveRoughness", false);
+	}
+
+	try {
+		m_occlusionTexture = createTexture(
+			Image::fromFile(modelPath + "_occlusion" + scene.texExt, 1),
+			GL_RED, GL_R8
+		);
+		m_pbrShader.setBool("haveOcclusion", true);
+	}
+	catch (std::runtime_error) {
+		std::cout << "No Occlusion Texture" << std::endl;
+		m_pbrShader.setBool("haveOcclusion", false);
+	}
+
+	try {
+		m_emissionTexture = createTexture(
+			Image::fromFile(modelPath + "_emission" + scene.texExt, 3),
+			GL_RGB, GL_SRGB8
+		);
+		m_pbrShader.setBool("haveEmission", true);
+	}
+	catch (std::runtime_error) {
+		std::cout << "No Emission Texture" << std::endl;
+		m_pbrShader.setBool("haveEmission", false);
+	}
 
 	// “尚未预滤波的环境贴图”变量（Cube Map类型)
 	Texture envTextureUnfiltered = createTexture(GL_TEXTURE_CUBE_MAP, kEnvMapSize, kEnvMapSize, GL_RGBA16F);
@@ -302,10 +353,15 @@ void Renderer::render(GLFWwindow* window, const Camera& camera, const SceneSetti
 	glBindTextureUnit(5, m_irmapTexture.id);
 	glBindTextureUnit(6, m_BRDF_LUT.id);
 	glBindTextureUnit(7, m_occlusionTexture.id);
-	glBindTextureUnit(8, m_emmisionTexture.id);
-	glBindVertexArray(m_pbrModel.vao);
-	glDrawElements(GL_TRIANGLES, m_pbrModel.numElements, GL_UNSIGNED_INT, 0);
-	// Mesh::renderSphere();
+	glBindTextureUnit(8, m_emissionTexture.id);
+	
+	if (scene.objType == Mesh::ImportModel) {
+		glBindVertexArray(m_pbrModel.vao);
+		glDrawElements(GL_TRIANGLES, m_pbrModel.numElements, GL_UNSIGNED_INT, 0);
+	}
+	else if (scene.objType == Mesh::Ball) {
+		Mesh::renderSphere();
+	}
 	
 	// 多重采样
 	resolveFramebuffer(m_framebuffer, m_resolveFramebuffer);

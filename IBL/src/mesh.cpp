@@ -6,11 +6,11 @@
 #include <assimp/LogStream.hpp>
 
 #include <glad/glad.h>
+
 #include <stdexcept>
+#include <iostream>
 
 #include "mesh.hpp"
-
-
 
 
 const unsigned int ImportFlags =
@@ -191,7 +191,7 @@ std::shared_ptr<Mesh> Mesh::fromFile(const std::string& filename)
 {
 	LogStream::initialize();
 
-	std::printf("Loading mesh: %s\n", filename.c_str());
+    std::cout << "Loading mesh: " << filename << std::endl;
 
 	std::shared_ptr<Mesh> mesh;
 	Assimp::Importer importer;
@@ -218,6 +218,7 @@ std::shared_ptr<Mesh> Mesh::fromString(const std::string& data)
 		mesh = std::shared_ptr<Mesh>(new Mesh{ scene->mMeshes[0] });
 	}
 	else {
+        std::cout << "Failed to create mesh from string: " << data << std::endl;
 		throw std::runtime_error("Failed to create mesh from string: " + data);
 	}
 	return mesh;

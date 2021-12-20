@@ -35,6 +35,11 @@ public:
 	static unsigned int sphereVAO;
 	static unsigned int indexCount;
 
+	enum ObjectType {
+		ImportModel,
+		Ball
+	};
+
 private:
 	Mesh(const struct aiMesh* mesh);
 

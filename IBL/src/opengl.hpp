@@ -90,7 +90,7 @@ private:
 	Texture m_metalnessTexture;
 	Texture m_roughnessTexture;
 	Texture m_occlusionTexture;
-	Texture m_emmisionTexture;
+	Texture m_emissionTexture;
 
 	GLuint m_transformUB;
 	GLuint m_shadingUB;

@@ -7,8 +7,10 @@ class Application
 public:
 	Application();
 	~Application();
-
 	void run(const std::unique_ptr<RendererInterface>& renderer);
+
+	static SceneSettings sceneSetting;
+	
 
 private:
 	static void mousePositionCallback(GLFWwindow* window, double xpos, double ypos);
@@ -19,8 +21,9 @@ private:
 	GLFWwindow* m_window;
 	static float lastX;
 	static float lastY;
-
+	static Camera m_camera;
 	static bool firstMouse;
 	static float deltaTime;
 	static float lastFrame;
+	
 };

@@ -1,3 +1,4 @@
+#pragma once
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
@@ -14,25 +15,13 @@ float Application::lastY = ScreenHeight / 2.0f;
 bool Application::firstMouse = true;
 float Application::deltaTime = 0.0f;
 float Application::lastFrame = 0.0f;
-Camera camera(glm::vec3(0.0f, 0.0f, 150.0f));
 
-SceneSettings sceneSettings;
+SceneSettings Application::sceneSetting;
+Camera Application::m_camera(glm::vec3(0.0f, 0.0f, 150.0f));
 
 Application::Application()
 	: m_window(nullptr)
-{
-	sceneSettings.lights[0].direction = glm::normalize(glm::vec3{ -1.0f,  0.0f, 0.0f });
-	sceneSettings.lights[1].direction = glm::normalize(glm::vec3{ 1.0f,  0.0f, 0.0f });
-	sceneSettings.lights[2].direction = glm::normalize(glm::vec3{ 0.0f, -1.0f, 0.0f });
-
-	sceneSettings.lights[0].radiance = glm::vec3{ 1.0f };
-	sceneSettings.lights[1].radiance = glm::vec3{ 1.0f };
-	sceneSettings.lights[2].radiance = glm::vec3{ 1.0f };
-
-	sceneSettings.envName = "street";
-	sceneSettings.objectPitch = 0;
-	sceneSettings.objectYaw = -90;
-}
+{}
 
 Application::~Application()
 {
@@ -53,7 +42,7 @@ void Application::run(const std::unique_ptr<RendererInterface>& renderer)
 	glfwSetKeyCallback(m_window, Application::keyCallback);
 	glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-	renderer->setup(sceneSettings);
+	renderer->setup(sceneSetting);
 	while (!glfwWindowShouldClose(m_window)) {
 
 		float currentFrame = glfwGetTime();
@@ -61,7 +50,7 @@ void Application::run(const std::unique_ptr<RendererInterface>& renderer)
 		lastFrame = currentFrame;
 		processInput();
 
-		renderer->render(m_window, camera, sceneSettings);
+		renderer->render(m_window, m_camera, sceneSetting);
 		glfwPollEvents();
 	}
 
@@ -83,12 +72,12 @@ void Application::mousePositionCallback(GLFWwindow* window, double xpos, double 
 	lastX = xpos;
 	lastY = ypos;
 
-	camera.ProcessMouseMovement(xoffset, yoffset);
+	m_camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
 void Application::mouseScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
-	camera.ProcessMouseScroll(yoffset);
+	m_camera.ProcessMouseScroll(yoffset);
 }
 
 void Application::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -104,13 +93,13 @@ void Application::keyCallback(GLFWwindow* window, int key, int scancode, int act
 			glfwSetWindowShouldClose(window, true);
 			break;
 		case GLFW_KEY_F1:
-			light = &sceneSettings.lights[0];
+			light = &sceneSetting.lights[0];
 			break;
 		case GLFW_KEY_F2:
-			light = &sceneSettings.lights[1];
+			light = &sceneSetting.lights[1];
 			break;
 		case GLFW_KEY_F3:
-			light = &sceneSettings.lights[2];
+			light = &sceneSetting.lights[2];
 			break;
 		}
 
@@ -123,19 +112,19 @@ void Application::keyCallback(GLFWwindow* window, int key, int scancode, int act
 void Application::processInput()
 {
 	if (glfwGetKey(m_window, GLFW_KEY_W) == GLFW_PRESS)
-		camera.ProcessKeyboard(FORWARD, deltaTime * MoveSpeed);
+		m_camera.ProcessKeyboard(FORWARD, deltaTime * MoveSpeed);
 	if (glfwGetKey(m_window, GLFW_KEY_S) == GLFW_PRESS)
-		camera.ProcessKeyboard(BACKWARD, deltaTime * MoveSpeed);
+		m_camera.ProcessKeyboard(BACKWARD, deltaTime * MoveSpeed);
 	if (glfwGetKey(m_window, GLFW_KEY_A) == GLFW_PRESS)
-		camera.ProcessKeyboard(LEFT, deltaTime * MoveSpeed);
+		m_camera.ProcessKeyboard(LEFT, deltaTime * MoveSpeed);
 	if (glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS)
-		camera.ProcessKeyboard(RIGHT, deltaTime * MoveSpeed);
+		m_camera.ProcessKeyboard(RIGHT, deltaTime * MoveSpeed);
 	if (glfwGetKey(m_window, GLFW_KEY_UP) == GLFW_PRESS)
-		sceneSettings.objectPitch -= OrbitSpeed;
+		sceneSetting.objectPitch -= OrbitSpeed;
 	if (glfwGetKey(m_window, GLFW_KEY_DOWN) == GLFW_PRESS)
-		sceneSettings.objectPitch += OrbitSpeed;
+		sceneSetting.objectPitch += OrbitSpeed;
 	if (glfwGetKey(m_window, GLFW_KEY_LEFT) == GLFW_PRESS)
-		sceneSettings.objectYaw -= OrbitSpeed;
+		sceneSetting.objectYaw -= OrbitSpeed;
 	if (glfwGetKey(m_window, GLFW_KEY_RIGHT) == GLFW_PRESS)
-		sceneSettings.objectYaw += OrbitSpeed;
+		sceneSetting.objectYaw += OrbitSpeed;
 }
