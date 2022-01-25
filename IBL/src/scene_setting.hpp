@@ -14,13 +14,19 @@ public:
 		bool enabled = false;
 	} lights[NumLights];
 
-	std::string envName;
-	std::string objName;
+	char* envName;
+	char* preEnv;
+	std::vector<char*> envNames;
+	
+	char* objName;
+	char* preObj;
+	std::vector<char*> objNames;
+	Mesh::ObjectType objType;
+
 	std::string objExt;
 	std::string texExt;
 
-	Mesh::ObjectType objType;
-
+	float objectScale;
 	float objectYaw;
 	float objectPitch;
 };

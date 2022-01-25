@@ -7,6 +7,9 @@ class File
 public:
 	static std::string readText(const std::string& filename);
 	static std::vector<char> readBinary(const std::string& filename);
+	static std::vector<char*> readAllFilesInDir(const std::string& path);
+	static std::vector<char*> readAllDirsInDir(const std::string& path);
+	static std::vector<char*> readAllFilesInDirWithExt(const std::string& path);
 };
 
 class Utility

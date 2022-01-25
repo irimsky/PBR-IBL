@@ -13,6 +13,7 @@ const float OrbitSpeed = 0.8;
 float Application::lastX = ScreenWidth / 2.0f;
 float Application::lastY = ScreenHeight / 2.0f;
 bool Application::firstMouse = true;
+bool Application::showMouse = false;
 float Application::deltaTime = 0.0f;
 float Application::lastFrame = 0.0f;
 
@@ -31,9 +32,8 @@ Application::~Application()
 	glfwTerminate();
 }
 
-void Application::run(const std::unique_ptr<RendererInterface>& renderer)
+void Application::run(const std::unique_ptr<Renderer>& renderer)
 {
-	glfwWindowHint(GLFW_RESIZABLE, 0);
 	m_window = renderer->initialize(ScreenWidth, ScreenHeight, DisplaySamples);
 
 	glfwSetWindowUserPointer(m_window, this);
@@ -41,6 +41,7 @@ void Application::run(const std::unique_ptr<RendererInterface>& renderer)
 	glfwSetScrollCallback(m_window, Application::mouseScrollCallback);
 	glfwSetKeyCallback(m_window, Application::keyCallback);
 	glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glfwMakeContextCurrent(m_window);
 
 	renderer->setup(sceneSetting);
 	while (!glfwWindowShouldClose(m_window)) {
@@ -48,9 +49,15 @@ void Application::run(const std::unique_ptr<RendererInterface>& renderer)
 		float currentFrame = glfwGetTime();
 		deltaTime = currentFrame - lastFrame;
 		lastFrame = currentFrame;
-		processInput();
 
+		if(!showMouse) processInput();
+		
 		renderer->render(m_window, m_camera, sceneSetting);
+
+		renderer->renderImgui(sceneSetting);
+		
+		
+		glfwSwapBuffers(m_window);
 		glfwPollEvents();
 	}
 
@@ -59,6 +66,8 @@ void Application::run(const std::unique_ptr<RendererInterface>& renderer)
 
 void Application::mousePositionCallback(GLFWwindow* window, double xpos, double ypos)
 {
+	if (showMouse) return;
+
 	if (firstMouse)
 	{
 		lastX = xpos;
@@ -77,32 +86,43 @@ void Application::mousePositionCallback(GLFWwindow* window, double xpos, double 
 
 void Application::mouseScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
+	if (showMouse) return;
 	m_camera.ProcessMouseScroll(yoffset);
 }
 
 void Application::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	Application* self = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
-
 	if (action == GLFW_PRESS) {
 
 		SceneSettings::Light* light = nullptr;
 
-		switch (key) {
-		case GLFW_KEY_ESCAPE:
-			glfwSetWindowShouldClose(window, true);
-			break;
-		case GLFW_KEY_F1:
-			light = &sceneSetting.lights[0];
-			break;
-		case GLFW_KEY_F2:
-			light = &sceneSetting.lights[1];
-			break;
-		case GLFW_KEY_F3:
-			light = &sceneSetting.lights[2];
-			break;
+		// 隐藏/显示鼠标
+		if (key == GLFW_KEY_LEFT_ALT) {
+			showMouse = showMouse ? false : true;
+			if (showMouse)
+			{
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			}
+			else
+			{
+				firstMouse = true;
+				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+			}
 		}
 
+		// 退出
+		if (key == GLFW_KEY_ESCAPE) 
+			glfwSetWindowShouldClose(window, true);
+
+		// 灯光设置
+		if (key == GLFW_KEY_F1)
+			light = &sceneSetting.lights[0];
+		if (key == GLFW_KEY_F2) 
+			light = &sceneSetting.lights[1];
+		if (key == GLFW_KEY_F3) 
+			light = &sceneSetting.lights[2];
+		
+		
 		if (light) {
 			light->enabled = !light->enabled;
 		}
@@ -119,12 +139,27 @@ void Application::processInput()
 		m_camera.ProcessKeyboard(LEFT, deltaTime * MoveSpeed);
 	if (glfwGetKey(m_window, GLFW_KEY_D) == GLFW_PRESS)
 		m_camera.ProcessKeyboard(RIGHT, deltaTime * MoveSpeed);
-	if (glfwGetKey(m_window, GLFW_KEY_UP) == GLFW_PRESS)
+	if (glfwGetKey(m_window, GLFW_KEY_UP) == GLFW_PRESS) {
 		sceneSetting.objectPitch -= OrbitSpeed;
-	if (glfwGetKey(m_window, GLFW_KEY_DOWN) == GLFW_PRESS)
+		if (sceneSetting.objectPitch < -180.0)
+			sceneSetting.objectPitch += 360.0;
+	}
+	if (glfwGetKey(m_window, GLFW_KEY_DOWN) == GLFW_PRESS) {
 		sceneSetting.objectPitch += OrbitSpeed;
-	if (glfwGetKey(m_window, GLFW_KEY_LEFT) == GLFW_PRESS)
+		if (sceneSetting.objectPitch > 180.0)
+			sceneSetting.objectPitch -= 360.0;
+	}
+		
+	if (glfwGetKey(m_window, GLFW_KEY_LEFT) == GLFW_PRESS) {
 		sceneSetting.objectYaw -= OrbitSpeed;
-	if (glfwGetKey(m_window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+		if (sceneSetting.objectYaw < -180.0)
+			sceneSetting.objectYaw += 360.0;
+	}
+		
+	if (glfwGetKey(m_window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
 		sceneSetting.objectYaw += OrbitSpeed;
+		if (sceneSetting.objectYaw > 180.0)
+			sceneSetting.objectYaw -= 360.0;
+	}
+		
 }

@@ -1,5 +1,5 @@
 #pragma once
-#include "renderer.hpp"
+#include "opengl.hpp"
 
 
 class Application
@@ -7,7 +7,7 @@ class Application
 public:
 	Application();
 	~Application();
-	void run(const std::unique_ptr<RendererInterface>& renderer);
+	void run(const std::unique_ptr<Renderer>& renderer);
 
 	static SceneSettings sceneSetting;
 	
@@ -25,5 +25,5 @@ private:
 	static bool firstMouse;
 	static float deltaTime;
 	static float lastFrame;
-	
+	static bool showMouse;
 };

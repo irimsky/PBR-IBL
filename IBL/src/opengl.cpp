@@ -5,6 +5,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/euler_angles.hpp>
 
+#include <imgui_impl_opengl3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+
 #include <GLFW/glfw3.h>
 
 #include "mesh.hpp"
@@ -38,6 +42,7 @@ GLFWwindow* Renderer::initialize(int width, int height, int maxSamples)
 		
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_RESIZABLE, 0);
 
 	// 4.5版本OpenGL
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -84,6 +89,15 @@ GLFWwindow* Renderer::initialize(int width, int height, int maxSamples)
 	}
 
 	std::printf("OpenGL 4.5 Renderer [%s]\n", glGetString(GL_RENDERER));
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	// io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	ImGui::StyleColorsDark();
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init("#version 450");
+
 	return window;
 }
 
@@ -99,6 +113,8 @@ void Renderer::shutdown()
 	m_skyboxShader.deleteProgram();
 	m_pbrShader.deleteProgram();
 	m_tonemapShader.deleteProgram();
+	m_prefilterShader.deleteProgram();
+	m_irradianceMapShader.deleteProgram();
 
 	glDeleteBuffers(1, &m_transformUB);
 	glDeleteBuffers(1, &m_shadingUB);
@@ -114,14 +130,20 @@ void Renderer::shutdown()
 	deleteTexture(m_normalTexture);
 	deleteTexture(m_metalnessTexture);
 	deleteTexture(m_roughnessTexture);
+	deleteTexture(m_emissionTexture);
+	deleteTexture(m_occlusionTexture);
+
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 }
 
 void Renderer::setup(const SceneSettings& scene)
 {
 	// 各种贴图大小
-	static constexpr int kEnvMapSize = 1024;	// 必须是2的次幂
-	static constexpr int kIrradianceMapSize = 32;
-	static constexpr int kBRDF_LUT_Size = 512;
+	m_EnvMapSize = 1024;	// 必须是2的次幂
+	m_IrradianceMapSize = 32;
+	m_BRDF_LUT_Size = 512;
 
 	// 设置OpenGL全局状态
 	glEnable(GL_CULL_FACE);
@@ -137,165 +159,28 @@ void Renderer::setup(const SceneSettings& scene)
 
 	// 加载后处理、天空盒、pbr着色器
 	// TODO: recompile warning，检查一下
-	m_tonemapShader = Shader("data/shaders/postprocess_vs.glsl", "data/shaders/postprocess_fs.glsl");
-	m_pbrShader = Shader("data/shaders/pbr_vs.glsl", "data/shaders/pbr_fs.glsl");
-	m_skyboxShader = Shader("data/shaders/skybox_vs.glsl", "data/shaders/skybox_fs.glsl");
+	m_tonemapShader = Shader("./data/shaders/postprocess_vs.glsl", "./data/shaders/postprocess_fs.glsl");
+	m_pbrShader = Shader("./data/shaders/pbr_vs.glsl", "./data/shaders/pbr_fs.glsl");
+	m_skyboxShader = Shader("./data/shaders/skybox_vs.glsl", "./data/shaders/skybox_fs.glsl");
+
+	// 加载prefilter、 irradianceMap、equirect Project计算着色器
+	m_prefilterShader = ComputeShader("./data/shaders/cs_prefilter.glsl");
+	m_irradianceMapShader = ComputeShader("./data/shaders/cs_irradiance_map.glsl");
+	m_equirectToCubeShader = ComputeShader("./data/shaders/cs_equirect2cube.glsl");
 
 	std::cout << "Start Loading Models:" << std::endl;
-	// 天空盒模型
-	m_skybox = createMeshBuffer(Mesh::fromFile("data/skybox.obj"));
-	// PBR模型
-	std::string modelPath = "data/models/" + scene.objName + "/" + scene.objName;
-	if(scene.objType == Mesh::ImportModel)
-		m_pbrModel = createMeshBuffer(Mesh::fromFile(modelPath + scene.objExt));
+	// 加载天空盒模型
+	m_skybox = createMeshBuffer(Mesh::fromFile("./data/skybox.obj"));
 
-	
-	// 加载纹理贴图
-	std::cout << "Start Loading Textures:" << std::endl;
-	m_albedoTexture = createTexture(
-		Image::fromFile(modelPath + "_albedo" + scene.texExt, 3),
-		GL_RGB, GL_SRGB8
-	);
-	m_normalTexture = createTexture(
-		Image::fromFile(modelPath + "_normal" + scene.texExt, 3),
-		GL_RGB, GL_RGB8
-	);
+	// 加载PBR模型以及贴图
+	loadModels(scene.objName, const_cast<SceneSettings&>(scene));
 
-	m_pbrShader.use();
-	try {
-		m_metalnessTexture = createTexture(
-			Image::fromFile(modelPath + "_metalness" + scene.texExt, 1),
-			GL_RED, GL_R8
-		);
-		m_pbrShader.setBool("haveMetalness", true);
-	}
-	catch(std::runtime_error){
-		std::cout << "No Metal Texture" << std::endl;
-		m_pbrShader.setBool("haveMetalness", false);
-	}
+	// 加载环境贴图，同时预计算prefilter以及irradiance map
+	loadSceneHdr(scene.envName);
 
-	try {
-		m_roughnessTexture = createTexture(
-			Image::fromFile(modelPath + "_roughness" + scene.texExt, 1),
-			GL_RED, GL_R8
-		);
-		m_pbrShader.setBool("haveRoughness", true);
-	}
-	catch (std::runtime_error) {
-		std::cout << "No Rough Texture" << std::endl;
-		m_pbrShader.setBool("haveRoughness", false);
-	}
-
-	try {
-		m_occlusionTexture = createTexture(
-			Image::fromFile(modelPath + "_occlusion" + scene.texExt, 1),
-			GL_RED, GL_R8
-		);
-		m_pbrShader.setBool("haveOcclusion", true);
-	}
-	catch (std::runtime_error) {
-		std::cout << "No Occlusion Texture" << std::endl;
-		m_pbrShader.setBool("haveOcclusion", false);
-	}
-
-	try {
-		m_emissionTexture = createTexture(
-			Image::fromFile(modelPath + "_emission" + scene.texExt, 3),
-			GL_RGB, GL_SRGB8
-		);
-		m_pbrShader.setBool("haveEmission", true);
-	}
-	catch (std::runtime_error) {
-		std::cout << "No Emission Texture" << std::endl;
-		m_pbrShader.setBool("haveEmission", false);
-	}
-
-	// “尚未预滤波的环境贴图”变量（Cube Map类型)
-	Texture envTextureUnfiltered = createTexture(GL_TEXTURE_CUBE_MAP, kEnvMapSize, kEnvMapSize, GL_RGBA16F);
-
-	// 将环境贴图equirectangular投影成cubemap
-	ComputeShader equirectToCubeShader = ComputeShader("data/shaders/cs_equirect2cube.glsl");
-
-	// TODO: 支持直接读入cubemap
-	// 加载环境贴图（equirectangular型）
-	std::string envFilePath = "data/hdr/environment_";
-	envFilePath += scene.envName + ".hdr";
-	Texture envTextureEquirect = createTexture(Image::fromFile(envFilePath, 3), GL_RGB, GL_RGB16F, 1);
-		
-	// equirectangular 投影，将得到的结果写入“尚未预滤波的环境贴图”中
-	equirectToCubeShader.use();
-	glBindTextureUnit(0, envTextureEquirect.id);
-	glBindImageTexture(1, envTextureUnfiltered.id, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
-	equirectToCubeShader.compute(
-		envTextureUnfiltered.width / 32,
-		envTextureUnfiltered.height / 32,
-		6
-	);
-	equirectToCubeShader.deleteProgram();
-	// 已经投影到了envTextureUnfiltered上，将Equirect贴图删除
-	deleteTexture(envTextureEquirect);
-		
-	// 为“尚未预滤波的环境贴图”自动生成mipmap链
-	glGenerateTextureMipmap(envTextureUnfiltered.id);
-
-	// 环境贴图（cube map型）
-	m_envTexture = createTexture(GL_TEXTURE_CUBE_MAP, kEnvMapSize, kEnvMapSize, GL_RGBA16F);
-	// 复制“尚未预滤波的环境贴图”mipmap第0层（原图）到环境贴图的第0层上
-	glCopyImageSubData(envTextureUnfiltered.id, GL_TEXTURE_CUBE_MAP, 0, 0, 0, 0,
-		m_envTexture.id, GL_TEXTURE_CUBE_MAP, 0, 0, 0, 0,
-		m_envTexture.width, m_envTexture.height, 6);
-
-	// 滤波环境贴图变量
-	ComputeShader prefilterShader = ComputeShader("data/shaders/cs_prefilter.glsl");
-	prefilterShader.use();
-	glBindTextureUnit(0, envTextureUnfiltered.id);
-	// 根据粗糙度不同，对环境贴图进行预滤波（从第1级mipmap开始，第0级是原图）
-	const float maxMipmapLevels = glm::max(float(m_envTexture.levels - 1), 1.0f);
-	int size = kEnvMapSize / 2;
-	for (int level = 1; level <= maxMipmapLevels; ++level) {
-		const GLuint numGroups = glm::max(1, size / 32);
-		// 将指定层级的纹理贴图绑定
-		glBindImageTexture(1, m_envTexture.id, level, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
-		prefilterShader.setFloat("roughness", (float)level / maxMipmapLevels);
-		prefilterShader.compute(numGroups, numGroups, 6);
-		size /= 2;
-	}
-	prefilterShader.deleteProgram();
-
-	// 滤波过后的环境贴图已经存在m_envTexture里
-	// 删除掉原有的“尚未预滤波的环境贴图”
-	deleteTexture(envTextureUnfiltered);
-	
-	// 预计算漫反射用的 irradiance map.
-	ComputeShader irradianceMapShader = ComputeShader("data/shaders/cs_irradiance_map.glsl");
-
-	m_irmapTexture = createTexture(GL_TEXTURE_CUBE_MAP, kIrradianceMapSize, kIrradianceMapSize, GL_RGBA16F, 1);
-
-	irradianceMapShader.use();
-	glBindTextureUnit(0, m_envTexture.id);
-	glBindImageTexture(1, m_irmapTexture.id, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
-	irradianceMapShader.compute(
-		m_irmapTexture.width / 32, 
-		m_irmapTexture.height / 32, 
-		6
-	);
-	irradianceMapShader.deleteProgram();
-	
 	// 预计算高光部分需要的Look Up Texture (cosTheta, roughness)
-	ComputeShader LUTShader = ComputeShader("data/shaders/cs_lut.glsl");
-
-	m_BRDF_LUT = createTexture(GL_TEXTURE_2D, kBRDF_LUT_Size, kBRDF_LUT_Size, GL_RG16F, 1);
-	glTextureParameteri(m_BRDF_LUT.id, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTextureParameteri(m_BRDF_LUT.id, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-	LUTShader.use();
-	glBindImageTexture(0, m_BRDF_LUT.id, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RG16F);
-	LUTShader.compute(
-		m_BRDF_LUT.width / 32, 
-		m_BRDF_LUT.height / 32,
-		1
-	);
-	LUTShader.deleteProgram();
+	calcLUT();
+	
 		
 	glFinish();
 }
@@ -306,7 +191,7 @@ void Renderer::render(GLFWwindow* window, const Camera& camera, const SceneSetti
 	TransformUB transformUniforms;
 	transformUniforms.model = 
 		glm::eulerAngleXY(glm::radians(scene.objectPitch), glm::radians(scene.objectYaw))
-		* glm::scale(glm::mat4(1.0f), glm::vec3(25, 25, 25));
+		* glm::scale(glm::mat4(1.0f), glm::vec3(scene.objectScale));
 
 	transformUniforms.view = camera.GetViewMatrix();
 	transformUniforms.projection = glm::perspective(glm::radians(camera.Zoom), float(m_framebuffer.width)/float(m_framebuffer.height), 1.0f, 1000.0f);
@@ -374,7 +259,67 @@ void Renderer::render(GLFWwindow* window, const Camera& camera, const SceneSetti
 	glBindVertexArray(m_emptyVAO);	// 空的VAO，仅做占位
 	glDrawArrays(GL_TRIANGLES, 0, 3);
 
-	glfwSwapBuffers(window);
+	// glfwSwapBuffers(window);
+}
+
+void Renderer::renderImgui(SceneSettings& scene)
+{
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+	{
+		ImGui::Begin("Imgui");
+		ImGui::Text("Press [left ALT] to show mouse and control GUI");
+		ImGui::SliderFloat("Scale", &scene.objectScale, 0.01, 30.0);
+		ImGui::SliderFloat("Yaw", &scene.objectYaw, -180.0, 180.0);
+		ImGui::SliderFloat("Pitch", &scene.objectPitch, -180.0, 180.0);
+		ImGui::Checkbox("Light1", &scene.lights[0].enabled);
+		ImGui::Checkbox("Light2", &scene.lights[1].enabled);
+		ImGui::Checkbox("Light3", &scene.lights[2].enabled);
+		
+		// 场景切换ComboBox
+		if (ImGui::BeginCombo("Scene", scene.envName)) {
+			for (int i = 0; i < scene.envNames.size(); i++)
+			{
+				bool isSelected = (scene.envName == scene.envNames[i]);
+				if (ImGui::Selectable(scene.envNames[i], isSelected)) {
+					scene.envName = scene.envNames[i];
+					if (strcmp(scene.preEnv, scene.envName))
+					{
+						loadSceneHdr(scene.envName);
+						strcpy(scene.preEnv, scene.envName);
+					}
+				}
+				if (isSelected)
+					ImGui::SetItemDefaultFocus();  
+			}
+			ImGui::EndCombo();
+		}
+
+		// 物体切换Combox
+		if (ImGui::BeginCombo("Object", scene.objName)) {
+			for (int i = 0; i < scene.objNames.size(); i++)
+			{
+				bool isSelected = (scene.objName == scene.objNames[i]);
+				if (ImGui::Selectable(scene.objNames[i], isSelected)) {
+					scene.objName = scene.objNames[i];
+					if (strcmp(scene.preObj, scene.objName))
+					{
+						loadModels(scene.objName, scene);
+						strcpy(scene.preObj, scene.objName);
+					}
+				}
+				if (isSelected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+		
+		
+		ImGui::End();
+	}
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
 Texture Renderer::createTexture(GLenum target, int width, int height, GLenum internalformat, int levels) const
@@ -539,6 +484,205 @@ GLuint Renderer::createUniformBuffer(const void* data, size_t size)
 	glCreateBuffers(1, &ubo);
 	glNamedBufferStorage(ubo, size, data, GL_DYNAMIC_STORAGE_BIT);
 	return ubo;
+}
+
+void Renderer::loadModels(const std::string& modelName, SceneSettings& scene)
+{
+	deleteMeshBuffer(m_pbrModel);
+	deleteTexture(m_albedoTexture);
+	deleteTexture(m_normalTexture);
+	deleteTexture(m_metalnessTexture);
+	deleteTexture(m_roughnessTexture);
+	deleteTexture(m_emissionTexture);
+	deleteTexture(m_occlusionTexture);
+
+	std::string modelPath = "./data/models/";
+	modelPath += modelName;
+
+	std::vector<char*> modelFiles = File::readAllFilesInDirWithExt(modelPath);
+	bool haveMesh = false, haveTexture = false;
+	for (char* str : modelFiles)
+	{
+		std::string tmpStr = str;
+		int dotIdx = tmpStr.find_last_of('.');
+		std::string name = tmpStr.substr(0, dotIdx), 
+				    extName = tmpStr.substr(dotIdx);
+		
+		if (name == modelName)
+		{
+			scene.objExt = extName;
+			haveMesh = true;
+		}
+		else if (name.substr(0, tmpStr.find_last_of('_')) == modelName)
+		{
+			scene.texExt = extName;
+			haveTexture = true;
+		}
+	}
+
+	if (modelFiles.size() == 0 || (!haveMesh && !haveTexture))
+	{
+		throw std::runtime_error("Failed to load model files: " + modelName);
+	}
+
+	std::string name = modelName;
+	if (name.substr(name.find_last_of('_') + 1) == "ball")
+		scene.objType = Mesh::Ball;
+	else
+		scene.objType = Mesh::ImportModel;
+
+	modelPath += "/" + modelName;
+	if (scene.objType == Mesh::ImportModel)
+		m_pbrModel = createMeshBuffer(Mesh::fromFile(modelPath + scene.objExt));
+
+	if (modelName == "cerberus")
+		scene.objectScale = 1.0;
+	else
+		scene.objectScale = 25.0;
+
+	// 加载纹理贴图
+	std::cout << "Start Loading Textures:" << std::endl;
+	m_albedoTexture = createTexture(
+		Image::fromFile(modelPath + "_albedo" + scene.texExt, 3),
+		GL_RGB, GL_SRGB8
+	);
+	m_normalTexture = createTexture(
+		Image::fromFile(modelPath + "_normal" + scene.texExt, 3),
+		GL_RGB, GL_RGB8
+	);
+
+	m_pbrShader.use();
+	try {
+		m_metalnessTexture = createTexture(
+			Image::fromFile(modelPath + "_metalness" + scene.texExt, 1),
+			GL_RED, GL_R8
+		);
+		m_pbrShader.setBool("haveMetalness", true);
+	}
+	catch (std::runtime_error) {
+		std::cout << "No Metal Texture" << std::endl;
+		m_pbrShader.setBool("haveMetalness", false);
+	}
+
+	try {
+		m_roughnessTexture = createTexture(
+			Image::fromFile(modelPath + "_roughness" + scene.texExt, 1),
+			GL_RED, GL_R8
+		);
+		m_pbrShader.setBool("haveRoughness", true);
+	}
+	catch (std::runtime_error) {
+		std::cout << "No Rough Texture" << std::endl;
+		m_pbrShader.setBool("haveRoughness", false);
+	}
+
+	try {
+		m_occlusionTexture = createTexture(
+			Image::fromFile(modelPath + "_occlusion" + scene.texExt, 1),
+			GL_RED, GL_R8
+		);
+		m_pbrShader.setBool("haveOcclusion", true);
+	}
+	catch (std::runtime_error) {
+		std::cout << "No Occlusion Texture" << std::endl;
+		m_pbrShader.setBool("haveOcclusion", false);
+	}
+
+	try {
+		m_emissionTexture = createTexture(
+			Image::fromFile(modelPath + "_emission" + scene.texExt, 3),
+			GL_RGB, GL_SRGB8
+		);
+		m_pbrShader.setBool("haveEmission", true);
+	}
+	catch (std::runtime_error) {
+		std::cout << "No Emission Texture" << std::endl;
+		m_pbrShader.setBool("haveEmission", false);
+	} 
+}
+
+void Renderer::loadSceneHdr(const std::string& filename)
+{
+	// “尚未预滤波的环境贴图”变量（Cube Map类型)
+	Texture envTextureUnfiltered = createTexture(GL_TEXTURE_CUBE_MAP, m_EnvMapSize, m_EnvMapSize, GL_RGBA16F);
+
+	std::string envFilePath = "./data/hdr/" + filename;
+	envFilePath += ".hdr";
+	Texture envTextureEquirect = createTexture(Image::fromFile(envFilePath, 3), GL_RGB, GL_RGB16F, 1);
+
+	// equirectangular 投影，将得到的结果写入“尚未预滤波的环境贴图”中
+	m_equirectToCubeShader.use();
+	glBindTextureUnit(0, envTextureEquirect.id);
+	glBindImageTexture(1, envTextureUnfiltered.id, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
+	m_equirectToCubeShader.compute(
+		envTextureUnfiltered.width / 32,
+		envTextureUnfiltered.height / 32,
+		6
+	);
+
+	// 已经投影到了envTextureUnfiltered上，将Equirect贴图删除
+	deleteTexture(envTextureEquirect);
+
+	// 为“尚未预滤波的环境贴图”自动生成mipmap链
+	glGenerateTextureMipmap(envTextureUnfiltered.id);
+
+	// 环境贴图（cube map型）
+	m_envTexture = createTexture(GL_TEXTURE_CUBE_MAP, m_EnvMapSize, m_EnvMapSize, GL_RGBA16F);
+	// 复制“尚未预滤波的环境贴图”mipmap第0层（原图）到环境贴图的第0层上
+	glCopyImageSubData(envTextureUnfiltered.id, GL_TEXTURE_CUBE_MAP, 0, 0, 0, 0,
+		m_envTexture.id, GL_TEXTURE_CUBE_MAP, 0, 0, 0, 0,
+		m_envTexture.width, m_envTexture.height, 6);
+
+	// 滤波环境贴图变量
+	m_prefilterShader.use();
+	glBindTextureUnit(0, envTextureUnfiltered.id);
+	// 根据粗糙度不同，对环境贴图进行预滤波（从第1级mipmap开始，第0级是原图）
+	const float maxMipmapLevels = glm::max(float(m_envTexture.levels - 1), 1.0f);
+	int size = m_EnvMapSize / 2;
+	for (int level = 1; level <= maxMipmapLevels; ++level) {
+		const GLuint numGroups = glm::max(1, size / 32);
+		// 将指定层级的纹理贴图绑定
+		glBindImageTexture(1, m_envTexture.id, level, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
+		m_prefilterShader.setFloat("roughness", (float)level / maxMipmapLevels);
+		m_prefilterShader.compute(numGroups, numGroups, 6);
+		size /= 2;
+	}
+
+	// 滤波过后的环境贴图已经存在m_envTexture里
+	// 删除掉原有的“尚未预滤波的环境贴图”
+	deleteTexture(envTextureUnfiltered);
+
+	// 预计算漫反射用的 irradiance map.
+
+	m_irmapTexture = createTexture(GL_TEXTURE_CUBE_MAP, m_IrradianceMapSize, m_IrradianceMapSize, GL_RGBA16F, 1);
+
+	m_irradianceMapShader.use();
+	glBindTextureUnit(0, m_envTexture.id);
+	glBindImageTexture(1, m_irmapTexture.id, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA16F);
+	m_irradianceMapShader.compute(
+		m_irmapTexture.width / 32,
+		m_irmapTexture.height / 32,
+		6
+	);
+}
+
+void Renderer::calcLUT() 
+{
+	// 预计算高光部分需要的Look Up Texture (cosTheta, roughness)
+	ComputeShader LUTShader = ComputeShader("data/shaders/cs_lut.glsl");
+
+	m_BRDF_LUT = createTexture(GL_TEXTURE_2D, m_BRDF_LUT_Size, m_BRDF_LUT_Size, GL_RG16F, 1);
+	glTextureParameteri(m_BRDF_LUT.id, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTextureParameteri(m_BRDF_LUT.id, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	LUTShader.use();
+	glBindImageTexture(0, m_BRDF_LUT.id, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RG16F);
+	LUTShader.compute(
+		m_BRDF_LUT.width / 32,
+		m_BRDF_LUT.height / 32,
+		1
+	);
+	LUTShader.deleteProgram();
 }
 
 #if _DEBUG

@@ -3,18 +3,19 @@
 #include <memory>
 #include <vector>
 
+
 #include "application.hpp"
 
 #include "opengl.hpp"
 
-void init(const char* objName, const char* envName, const char* objExt, const char* texExt);
+void init();
 
 int main(int argc, char* argv[])
 {
-	init("helmet", "street", ".obj", ".tga");
-	RendererInterface* renderer = new Renderer();
+	init();
+	Renderer* renderer = new Renderer();
 	try {
-		Application().run(std::unique_ptr<RendererInterface>{ renderer });
+		Application().run(std::unique_ptr<Renderer>{ renderer });
 	}
 	catch (const std::exception& e) {
 		std::fprintf(stderr, "Error: %s\n", e.what());
@@ -22,19 +23,27 @@ int main(int argc, char* argv[])
 	}
 }
 
-void init(const char* objName, const char* envName, const char* objExt, const char* texExt)
+void init()
 {
-	Application::sceneSetting.envName = envName;
-	Application::sceneSetting.objName = objName;
-	std::string name = objName;	
-	if(name.substr(name.find_last_of('_')+1) == "ball")
+	Application::sceneSetting.envNames = File::readAllFilesInDir(".\\data\\hdr");
+	Application::sceneSetting.envName = new char[128];
+	strcpy(Application::sceneSetting.envName, Application::sceneSetting.envNames[0]);
+	Application::sceneSetting.preEnv = new char[128];
+	strcpy(Application::sceneSetting.preEnv, Application::sceneSetting.envNames[0]);
+	
+	Application::sceneSetting.objNames = File::readAllDirsInDir(".\\data\\models");
+	Application::sceneSetting.objName = new char[128];
+	strcpy(Application::sceneSetting.objName, Application::sceneSetting.objNames[0]);
+	Application::sceneSetting.preObj = new char[128];
+	strcpy(Application::sceneSetting.preObj, Application::sceneSetting.objNames[0]);
+	
+	std::string objName = Application::sceneSetting.objNames[0];
+	if(objName.substr(objName.find_last_of('_') + 1) == "ball")
 		Application::sceneSetting.objType = Mesh::Ball;	
 	else
 		Application::sceneSetting.objType = Mesh::ImportModel;
 
-	Application::sceneSetting.objExt = objExt;	// 模型文件后缀名
-	Application::sceneSetting.texExt = texExt;	// 纹理文件后缀名
-
+	Application::sceneSetting.objectScale = 25.0;
 	Application::sceneSetting.objectPitch = 0;
 	Application::sceneSetting.objectYaw = -90;
 

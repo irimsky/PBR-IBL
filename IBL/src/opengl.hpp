@@ -2,12 +2,13 @@
 
 #include <glad/glad.h>
 #include <string>
+#include <glm/mat4x4.hpp>
 
-
-#include "renderer.hpp"
 #include "shader.hpp"
-#include "application.hpp"
+#include "camera.hpp"
+#include "scene_setting.hpp"
 
+struct GLFWwindow;
 
 struct MeshBuffer
 {
@@ -34,14 +35,15 @@ struct Texture
 	int levels;
 };
 
-class Renderer final : public RendererInterface
+class Renderer
 {
 public:
 	Renderer();
-	GLFWwindow* initialize(int width, int height, int maxSamples) override;
-	void setup(const SceneSettings& scene) override;
+	GLFWwindow* initialize(int width, int height, int maxSamples) ;
+	void setup(const SceneSettings& scene) ;
 	void render(GLFWwindow* window, const Camera& camera, const SceneSettings& scene);
-	void shutdown() override;
+	void renderImgui(SceneSettings& scene);
+	void shutdown();
 
 private:
 	Texture createTexture(GLenum target, int width, int height, GLenum internalformat, int levels = 0) const;
@@ -56,6 +58,12 @@ private:
 	static void deleteMeshBuffer(MeshBuffer& buffer);
 
 	static GLuint createUniformBuffer(const void* data, size_t size);
+
+	void loadModels(const std::string& modelName, SceneSettings& scene);
+	void loadSceneHdr(const std::string& filename);
+	void calcLUT();
+	
+
 	template<typename T> GLuint createUniformBuffer(const T* data = nullptr)
 	{
 		return createUniformBuffer(data, sizeof(T));
@@ -80,6 +88,13 @@ private:
 	Shader m_tonemapShader;
 	Shader m_skyboxShader;
 	Shader m_pbrShader;
+	ComputeShader m_equirectToCubeShader;
+	ComputeShader m_prefilterShader;
+	ComputeShader m_irradianceMapShader;
+
+	int m_EnvMapSize;
+	int m_IrradianceMapSize;
+	int m_BRDF_LUT_Size;
 
 	Texture m_envTexture;
 	Texture m_irmapTexture;
