@@ -10,12 +10,13 @@
 
 ## 控制 Controls
 
-| Key      | Operation                                              |
-| -------- | ------------------------------------------------------ |
-| WASD     | 移动镜头 Move Camera                                   |
-| ↑↓←→     | 旋转物体 Rotate Model                                  |
-| 鼠标移动 | 旋转镜头 Rotate Camera                                 |
-| F1~F3    | 点亮三个不同方向的平行光照 Flip the directional lights |
+| Key      | Operation                                                    |
+| -------- | ------------------------------------------------------------ |
+| WASD     | 移动镜头 Move Camera                                         |
+| ↑↓←→     | 旋转物体 Rotate Model                                        |
+| 鼠标移动 | 旋转镜头 Rotate Camera                                       |
+| F1~F3    | 点亮三个不同方向的平行光照 Flip the directional lights       |
+| Left Alt | 切换 场景/GUI 的鼠标控制 Switch mouse control between scene and GUI |
 
 
 
@@ -28,6 +29,16 @@
 `data`：模型、纹理、shader、背景图	Model/Texture/Shader/Background HDR
 
 `assimp-vc142-mt.dll`：assimp动态库
+
+
+
+- data
+  - hdr（Background HDR）
+  - models
+    - xxx  .objExt
+    - xxx_yyy  .texExt
+  - shaders
+  - skybox model
 
 
 
