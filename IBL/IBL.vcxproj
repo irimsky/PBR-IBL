@@ -176,6 +176,7 @@
     <ClInclude Include="src\application.hpp" />
     <ClInclude Include="src\camera.hpp" />
     <ClInclude Include="src\image.hpp" />
+    <ClInclude Include="src\math.hpp" />
     <ClInclude Include="src\mesh.hpp" />
     <ClInclude Include="src\opengl.hpp" />
     <ClInclude Include="src\scene_setting.hpp" />

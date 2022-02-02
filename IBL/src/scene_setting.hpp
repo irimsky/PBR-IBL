@@ -9,8 +9,8 @@ class SceneSettings
 public:
 	static const int NumLights = 3;
 	struct Light {
-		glm::vec3 direction;
-		glm::vec3 radiance;
+		std::vector<float> radiance;
+		std::vector<float> direction;
 		bool enabled = false;
 	} lights[NumLights];
 

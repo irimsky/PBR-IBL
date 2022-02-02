@@ -1,9 +1,9 @@
 #include <stdexcept>
 #include <memory>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/euler_angles.hpp>
+//#include <glm/glm.hpp>
+//#include <glm/gtc/matrix_transform.hpp>
+//#include <glm/gtx/euler_angles.hpp>
 
 #include <imgui_impl_opengl3.h>
 #include <imgui.h>
@@ -11,11 +11,13 @@
 
 #include <GLFW/glfw3.h>
 
+#include "math.hpp"
 #include "mesh.hpp"
 #include "image.hpp"
 #include "utils.hpp"
 #include "opengl.hpp"
 #include "application.hpp"
+
 
 
 struct TransformUB
@@ -202,9 +204,9 @@ void Renderer::render(GLFWwindow* window, const Camera& camera, const SceneSetti
 	shadingUniforms.eyePosition = glm::vec4(eyePosition, 0.0f);
 	for (int i = 0; i < SceneSettings::NumLights; ++i) {
 		const SceneSettings::Light& light = scene.lights[i];
-		shadingUniforms.lights[i].direction = glm::vec4{ light.direction, 0.0f };
+		shadingUniforms.lights[i].direction = glm::normalize(glm::vec4{ toGlmVec3(light.direction), 0.0f });
 		if (light.enabled) {
-			shadingUniforms.lights[i].radiance = glm::vec4{ light.radiance, 0.0f };
+			shadingUniforms.lights[i].radiance = glm::vec4{ toGlmVec3(light.radiance), 0.0f };
 		}
 		else {
 			shadingUniforms.lights[i].radiance = glm::vec4{};
@@ -273,9 +275,18 @@ void Renderer::renderImgui(SceneSettings& scene)
 		ImGui::SliderFloat("Scale", &scene.objectScale, 0.01, 30.0);
 		ImGui::SliderFloat("Yaw", &scene.objectYaw, -180.0, 180.0);
 		ImGui::SliderFloat("Pitch", &scene.objectPitch, -180.0, 180.0);
-		ImGui::Checkbox("Light1", &scene.lights[0].enabled);
-		ImGui::Checkbox("Light2", &scene.lights[1].enabled);
-		ImGui::Checkbox("Light3", &scene.lights[2].enabled);
+		
+		// 场景灯光设置
+		for (int i = 0; i < scene.NumLights; ++i)
+		{
+			std::string lightNum = "Light";
+			lightNum += '0' + char(i + 1);
+			ImGui::Checkbox(lightNum.c_str(), &scene.lights[i].enabled);
+			if (scene.lights[i].enabled) {
+				ImGui::ColorEdit3((lightNum + " Color").c_str(), scene.lights[i].radiance.data());
+				ImGui::DragFloat3((lightNum + " Dir").c_str(), scene.lights[i].direction.data(), 0.01f);
+			}
+		}
 		
 		// 场景切换ComboBox
 		if (ImGui::BeginCombo("Scene", scene.envName)) {
@@ -314,7 +325,6 @@ void Renderer::renderImgui(SceneSettings& scene)
 			}
 			ImGui::EndCombo();
 		}
-		
 		
 		ImGui::End();
 	}
@@ -665,7 +675,7 @@ void Renderer::loadSceneHdr(const std::string& filename)
 		6
 	);
 }
-
+ 
 void Renderer::calcLUT() 
 {
 	// 预计算高光部分需要的Look Up Texture (cosTheta, roughness)

@@ -122,6 +122,9 @@
     <ClInclude Include="lib\Include\imgui\backends\imgui_impl_opengl3_loader.h">
       <Filter>源文件\lib</Filter>
     </ClInclude>
+    <ClInclude Include="src\math.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="data\shaders\cs_equirect2cube.glsl">

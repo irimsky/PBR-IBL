@@ -1,12 +1,10 @@
 #include <cstdio>
 #include <string>
 #include <memory>
-#include <vector>
-
 
 #include "application.hpp"
-
 #include "opengl.hpp"
+#include "math.hpp"
 
 void init();
 
@@ -48,11 +46,11 @@ void init()
 	Application::sceneSetting.objectYaw = -90;
 
 	// π‚’’…Ë÷√
-	Application::sceneSetting.lights[0].direction = glm::normalize(glm::vec3{ -1.0f,  0.0f, 0.0f });
-	Application::sceneSetting.lights[1].direction = glm::normalize(glm::vec3{ 1.0f,  0.0f, 0.0f });
-	Application::sceneSetting.lights[2].direction = glm::normalize(glm::vec3{ 0.0f, -1.0f, 0.0f });
+	Application::sceneSetting.lights[0].direction = toVec3f(glm::normalize(glm::vec3{ -1.0f,  0.0f, 0.0f }));
+	Application::sceneSetting.lights[1].direction = toVec3f(glm::normalize(glm::vec3{ 1.0f,  0.0f, 0.0f }));
+	Application::sceneSetting.lights[2].direction = toVec3f(glm::normalize(glm::vec3{ 0.0f, -1.0f, 0.0f }));
 
-	Application::sceneSetting.lights[0].radiance = glm::vec3{ 1.0f };
-	Application::sceneSetting.lights[1].radiance = glm::vec3{ 1.0f };
-	Application::sceneSetting.lights[2].radiance = glm::vec3{ 1.0f };
+	Application::sceneSetting.lights[0].radiance = std::vector<float>(3, 1.0f);
+	Application::sceneSetting.lights[1].radiance = std::vector<float>(3, 1.0f);
+	Application::sceneSetting.lights[2].radiance = std::vector<float>(3, 1.0f);
 }
